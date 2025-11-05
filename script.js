@@ -4,14 +4,22 @@ const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial
 
 let activeTab = 'login';
 let currentScreenId = 'auth-screen';
+let isOfflineMode = false;
 
 let map = null;
 let evacuationRouteLayer = null;
 let shelterMarker = null;
 let quakeMarkersLayer = null; 
 
+let floodRiskLayer = null;
+let landslideRiskLayer = null;
+let hospitalMarker = null;
+let evacuationCenterLayer = null;
+
 const USER_LOCATION = [14.5615, 121.0260];
 const SHELTER_LOCATION = [14.5690, 121.0420]; 
+const HOSPITAL_LOCATION = [14.5580, 121.0150];
+
 const EVACUATION_ROUTE_COORDS = [
     USER_LOCATION,
     [14.5620, 121.0300], 
@@ -19,24 +27,51 @@ const EVACUATION_ROUTE_COORDS = [
     SHELTER_LOCATION
 ];
 
+const FLOOD_ZONE_COORDS = [
+    [[14.5600, 121.0200], [14.5620, 121.0250], [14.5610, 121.0280], [14.5590, 121.0230]]
+];
+const LANDSLIDE_ZONE_COORDS = [
+    [14.5650, 121.0200], 
+    [14.5660, 121.0230], 
+    [14.5645, 121.0250], 
+    [14.5630, 121.0220]
+];
+
+const PHILIPPINES_BOUNDS = {
+    lat: { min: 4, max: 21 },
+    lng: { min: 116, max: 128 }
+};
+
+// New bounding boxes focused on landmasses to avoid placing markers in the open sea
+const LAND_REGIONS = [
+    // Luzon (North) - including Metro Manila area
+    { lat: { min: 13, max: 19 }, lng: { min: 119, max: 123 } },
+    // Visayas (Center) - including Cebu/Leyte area
+    { lat: { min: 9, max: 13 }, lng: { min: 121, max: 125 } },
+    // Mindanao (South) - including Davao area
+    { lat: { min: 5, max: 9 }, lng: { min: 121, max: 126 } }
+];
+
+
 const ICON_PATHS = {
     'home-screen': {
-        idle: "./icons/home.png",
-        active: "./icons/home_select.png"
+        idle: "https://github.com/HakozBag/Alertquake/blob/main/icons/home.png?raw=true",
+        active: "https://github.com/HakozBag/Alertquake/blob/main/icons/home_select.png?raw=true"
     },
     'map-screen': {
-        idle: "./icons/map.png",
-        active: "./icons/map_select.png"
+        idle: "https://github.com/HakozBag/Alertquake/blob/main/icons/map.png?raw=true",
+        active: "https://github.com/HakozBag/Alertquake/blob/main/icons/map_select.png?raw=true"
     },
     'tips-screen': {
-        idle: "./icons/bulb.png",
-        active: "./icons/bulb_select.png"
+        idle: "https://github.com/HakozBag/Alertquake/blob/main/icons/bulb.png?raw=true",
+        active: "https://github.com/HakozBag/Alertquake/blob/main/icons/bulb_select.png?raw=true"
     },
     'contacts-screen': {
-        idle: "./icons/contacts.png",
-        active: "./icons/contact_select.png"
+        idle: "https://github.com/HakozBag/Alertquake/blob/main/icons/contacts.png?raw=true",
+        active: "https://github.com/HakozBag/Alertquake/blob/main/icons/contact_select.png?raw=true"
     }
 };
+
 
 const loginTab = document.getElementById('login-tab');
 const signupTab = document.getElementById('signup-tab');
@@ -52,6 +87,24 @@ const SWIPEABLE_SCREENS = ['home-screen', 'map-screen', 'tips-screen', 'contacts
 const mainContentWrapper = document.getElementById('main-content-wrapper');
 const sidebar = document.getElementById('sidebar');
 const sidebarOverlay = document.getElementById('sidebar-overlay');
+
+
+function getRandomLatLngInBounds(bounds) {
+    const lat = Math.random() * (bounds.lat.max - bounds.lat.min) + bounds.lat.min;
+    const lng = Math.random() * (bounds.lng.max - bounds.lng.min) + bounds.lng.min;
+    return [lat, lng];
+}
+
+function getRandomLatLngOnLand() {
+    // Select one of the three main land regions randomly
+    const selectedRegion = LAND_REGIONS[Math.floor(Math.random() * LAND_REGIONS.length)];
+    
+    // Generate a random coordinate within that specific region
+    const lat = Math.random() * (selectedRegion.lat.max - selectedRegion.lat.min) + selectedRegion.lat.min;
+    const lng = Math.random() * (selectedRegion.lng.max - selectedRegion.lng.min) + selectedRegion.lng.min;
+    return [lat, lng];
+}
+
 
 function generateRandomQuakeMarkers(center, radiusInDegrees, count) {
     const markers = [];
@@ -76,6 +129,44 @@ function generateRandomQuakeMarkers(center, radiusInDegrees, count) {
     return L.layerGroup(markers);
 }
 
+function addEvacuationCenters() {
+    
+    const centers = [];
+    // Custom icon for the center point (Shelter)
+    const greenShelterIcon = L.divIcon({
+        className: 'custom-div-icon green-shelter-marker',
+        html: '<i class="fa-solid fa-house-shelter" style="font-size: 25px; color: #67925f; text-shadow: 1px 1px 2px rgba(0,0,0,0.5);"></i>',
+        iconAnchor: [12, 25] 
+    });
+
+    for (let i = 0; i < 50; i++) { 
+        // Use the new function to keep the center on land
+        const latLng = getRandomLatLngOnLand(); 
+        
+        // 1. Add the marker icon for the center point
+        const marker = L.marker(latLng, { icon: greenShelterIcon })
+            .bindPopup(`**Evacuation Center #${i+1}**<br>Simulated Temporary Shelter`);
+        centers.push(marker);
+        
+        // 2. Add a small green circle around the marker to show the safe area
+        const circle = L.circle(latLng, {
+            color: '#67925f',
+            fillColor: '#afe6bb', 
+            fillOpacity: 0.3,
+            radius: 500 // 500 meters radius for a small safe zone
+        }).bindPopup(`Safe Zone Radius`);
+        centers.push(circle);
+    }
+    
+    evacuationCenterLayer = L.layerGroup(centers).addTo(map);
+    
+    map.fitBounds([
+        [PHILIPPINES_BOUNDS.lat.min, PHILIPPINES_BOUNDS.lng.min],
+        [PHILIPPINES_BOUNDS.lat.max, PHILIPPINES_BOUNDS.lng.max]
+    ]);
+}
+
+
 function initMap() {
     if (map === null) {
         map = L.map('map-container', { zoomControl: false }).setView(USER_LOCATION, 14);
@@ -84,19 +175,28 @@ function initMap() {
         }).addTo(map);
         L.marker(USER_LOCATION).addTo(map)
             .bindPopup('Your Current Location').openPopup();
-        toggleMapFeatures('activity');
+        // Set Evacuation Centers as default
+        toggleMapFeatures('evac_centers'); 
     } else {
         map.invalidateSize();
         map.setView(USER_LOCATION, 14);
     }
 }
 
-function toggleMapFeatures(mapType) {
+function clearMapLayers() {
     if (evacuationRouteLayer) { map.removeLayer(evacuationRouteLayer); evacuationRouteLayer = null; }
     if (shelterMarker) { map.removeLayer(shelterMarker); shelterMarker = null; }
     if (quakeMarkersLayer) { map.removeLayer(quakeMarkersLayer); quakeMarkersLayer = null; }
+    if (floodRiskLayer) { map.removeLayer(floodRiskLayer); floodRiskLayer = null; }
+    if (landslideRiskLayer) { map.removeLayer(landslideRiskLayer); landslideRiskLayer = null; }
+    if (hospitalMarker) { map.removeLayer(hospitalMarker); hospitalMarker = null; }
+    if (evacuationCenterLayer) { map.removeLayer(evacuationCenterLayer); evacuationCenterLayer = null; }
+}
 
-    if (mapType === 'evacuation') {
+function toggleMapFeatures(mapType) {
+    clearMapLayers();
+
+    if (mapType === 'local_route') {
         evacuationRouteLayer = L.polyline(EVACUATION_ROUTE_COORDS, {
             color: '#67925f', weight: 6, opacity: 0.8, dashArray: '10, 5' 
         }).addTo(map);
@@ -108,11 +208,53 @@ function toggleMapFeatures(mapType) {
         });
         shelterMarker = L.marker(SHELTER_LOCATION, { icon: greenIcon }).addTo(map)
             .bindPopup('<span style="font-weight: bold; color: #4CAF50;">Evacuation Center</span><br>Nearest and Safest Shelter').openPopup();
+    } else if (mapType === 'evac_centers') { 
+        addEvacuationCenters();
     } else if (mapType === 'faults') {
         quakeMarkersLayer = generateRandomQuakeMarkers(USER_LOCATION, 0.1, 10).addTo(map);
         map.setView(USER_LOCATION, 14);
+    } else if (mapType === 'flood') {
+        floodRiskLayer = L.polygon(FLOOD_ZONE_COORDS, {
+            color: 'blue',
+            fillColor: '#3498db',
+            fillOpacity: 0.4
+        }).addTo(map).bindPopup('High Flood Risk Zone');
+        map.setView(USER_LOCATION, 14);
+    } else if (mapType === 'landslide') {
+        landslideRiskLayer = L.polygon(LANDSLIDE_ZONE_COORDS, {
+            color: 'brown',
+            fillColor: '#a0522d',
+            fillOpacity: 0.5
+        }).addTo(map).bindPopup('High Landslide Risk Zone');
+        map.setView(USER_LOCATION, 14);
+    } else if (mapType === 'hospital') {
+        const hospitalIcon = L.divIcon({
+            className: 'custom-div-icon',
+            html: '<i class="fa-solid fa-hospital" style="font-size: 30px; color: #E74C3C; text-shadow: 1px 1px 2px rgba(0,0,0,0.5);"></i>',
+            iconAnchor: [15, 30] 
+        });
+        hospitalMarker = L.marker(HOSPITAL_LOCATION, { icon: hospitalIcon }).addTo(map)
+            .bindPopup('<span style="font-weight: bold; color: #E74C3C;">Nearest Hospital</span><br>St. Jude Medical Center').openPopup();
+        map.setView(HOSPITAL_LOCATION, 14); 
     } else {
          map.setView(USER_LOCATION, 14);
+    }
+}
+
+function callForHelp() {
+    showMessageModal("Distress signal sent! Your location (within 80m) is being transmitted to emergency contacts and nearby users.");
+    
+    if (map) {
+        const helpCircle = L.circle(USER_LOCATION, {
+            color: 'red',
+            fillColor: '#f03',
+            fillOpacity: 0.2,
+            radius: 80
+        }).addTo(map);
+
+        setTimeout(() => {
+            map.removeLayer(helpCircle);
+        }, 4000);
     }
 }
 
@@ -141,6 +283,7 @@ function navigateTo(targetScreenId, direction = 'right') {
         const targetIndex = SWIPEABLE_SCREENS.indexOf(targetScreenId);
         direction = targetIndex > currentIndex ? 'right' : 'left';
     }
+
 
     currentScreen.classList.remove('screen-visible');
     if (direction === 'right') {
@@ -216,6 +359,32 @@ function toggleSidebar() {
     }
 }
 
+function toggleOfflineMode() {
+    isOfflineMode = !isOfflineMode;
+    const phoneTemplate = document.getElementById('phone-template');
+    const offlineBtn = document.getElementById('offline-mode-btn');
+    const offlineText = document.getElementById('offline-mode-text');
+    const offlineIcon = document.getElementById('offline-mode-icon');
+    const bottomNav = document.getElementById('bottom-nav');
+
+    if (isOfflineMode) {
+        phoneTemplate.classList.add('grayscale-mode');
+        offlineText.textContent = 'Online Mode';
+        offlineIcon.classList.remove('fa-plug-circle-xmark', 'text-gray-600');
+        offlineIcon.classList.add('fa-plug-circle-bolt', 'text-app-blue');
+        offlineBtn.classList.add('bg-blue-50'); 
+        bottomNav.style.backgroundColor = '#d1d5db';
+    } else {
+        phoneTemplate.classList.remove('grayscale-mode');
+        offlineText.textContent = 'Offline Mode';
+        offlineIcon.classList.add('fa-plug-circle-xmark', 'text-gray-600');
+        offlineIcon.classList.remove('fa-plug-circle-bolt', 'text-app-blue');
+        offlineBtn.classList.remove('bg-blue-50'); 
+        bottomNav.style.backgroundColor = 'white'; 
+    }
+}
+
+
 function handleSettingsClick() {
     toggleSidebar();
     showMessageModal("Settings screen is not yet implemented.");
@@ -228,6 +397,9 @@ function handleTermsClick() {
 
 function handleLogout() {
     toggleSidebar(); 
+    if (isOfflineMode) {
+        toggleOfflineMode(); 
+    }
     navigateTo('auth-screen', 'left');
 }
 
@@ -256,6 +428,7 @@ function updateNavBar(screenId) {
         }
     }
 }
+
 
 function updateTabs() {
     if (activeTab === 'login') {
@@ -360,6 +533,7 @@ function showMessageModal(message) {
 function closeModal() {
     document.getElementById('custom-modal').classList.add('hidden');
 }
+
 
 window.onload = () => {
     updateTabs();
