@@ -42,13 +42,9 @@ const PHILIPPINES_BOUNDS = {
     lng: { min: 116, max: 128 }
 };
 
-// New bounding boxes focused on landmasses to avoid placing markers in the open sea
 const LAND_REGIONS = [
-    // Luzon (North) - including Metro Manila area
     { lat: { min: 13, max: 19 }, lng: { min: 119, max: 123 } },
-    // Visayas (Center) - including Cebu/Leyte area
     { lat: { min: 9, max: 13 }, lng: { min: 121, max: 125 } },
-    // Mindanao (South) - including Davao area
     { lat: { min: 5, max: 9 }, lng: { min: 121, max: 126 } }
 ];
 
@@ -96,10 +92,8 @@ function getRandomLatLngInBounds(bounds) {
 }
 
 function getRandomLatLngOnLand() {
-    // Select one of the three main land regions randomly
     const selectedRegion = LAND_REGIONS[Math.floor(Math.random() * LAND_REGIONS.length)];
     
-    // Generate a random coordinate within that specific region
     const lat = Math.random() * (selectedRegion.lat.max - selectedRegion.lat.min) + selectedRegion.lat.min;
     const lng = Math.random() * (selectedRegion.lng.max - selectedRegion.lng.min) + selectedRegion.lng.min;
     return [lat, lng];
@@ -130,9 +124,11 @@ function generateRandomQuakeMarkers(center, radiusInDegrees, count) {
 }
 
 function addEvacuationCenters() {
+    if (evacuationCenterLayer && map.hasLayer(evacuationCenterLayer)) {
+        map.removeLayer(evacuationCenterLayer);
+    }
     
     const centers = [];
-    // Custom icon for the center point (Shelter)
     const greenShelterIcon = L.divIcon({
         className: 'custom-div-icon green-shelter-marker',
         html: '<i class="fa-solid fa-house-shelter" style="font-size: 25px; color: #67925f; text-shadow: 1px 1px 2px rgba(0,0,0,0.5);"></i>',
@@ -140,20 +136,17 @@ function addEvacuationCenters() {
     });
 
     for (let i = 0; i < 50; i++) { 
-        // Use the new function to keep the center on land
         const latLng = getRandomLatLngOnLand(); 
         
-        // 1. Add the marker icon for the center point
         const marker = L.marker(latLng, { icon: greenShelterIcon })
             .bindPopup(`**Evacuation Center #${i+1}**<br>Simulated Temporary Shelter`);
         centers.push(marker);
         
-        // 2. Add a small green circle around the marker to show the safe area
         const circle = L.circle(latLng, {
             color: '#67925f',
             fillColor: '#afe6bb', 
             fillOpacity: 0.3,
-            radius: 500 // 500 meters radius for a small safe zone
+            radius: 500
         }).bindPopup(`Safe Zone Radius`);
         centers.push(circle);
     }
@@ -175,8 +168,14 @@ function initMap() {
         }).addTo(map);
         L.marker(USER_LOCATION).addTo(map)
             .bindPopup('Your Current Location').openPopup();
-        // Set Evacuation Centers as default
-        toggleMapFeatures('evac_centers'); 
+        addEvacuationCenters(); 
+        
+        const defaultButton = document.querySelector(`.map-feature-btn[onclick*="hospital"]`);
+        if (defaultButton) {
+             defaultButton.classList.add('bg-app-blue', 'text-white');
+             defaultButton.classList.remove('text-gray-700');
+        }
+
     } else {
         map.invalidateSize();
         map.setView(USER_LOCATION, 14);
@@ -184,66 +183,83 @@ function initMap() {
 }
 
 function clearMapLayers() {
-    if (evacuationRouteLayer) { map.removeLayer(evacuationRouteLayer); evacuationRouteLayer = null; }
-    if (shelterMarker) { map.removeLayer(shelterMarker); shelterMarker = null; }
-    if (quakeMarkersLayer) { map.removeLayer(quakeMarkersLayer); quakeMarkersLayer = null; }
-    if (floodRiskLayer) { map.removeLayer(floodRiskLayer); floodRiskLayer = null; }
-    if (landslideRiskLayer) { map.removeLayer(landslideRiskLayer); landslideRiskLayer = null; }
-    if (hospitalMarker) { map.removeLayer(hospitalMarker); hospitalMarker = null; }
-    if (evacuationCenterLayer) { map.removeLayer(evacuationCenterLayer); evacuationCenterLayer = null; }
+    if (evacuationRouteLayer && map.hasLayer(evacuationRouteLayer)) { map.removeLayer(evacuationRouteLayer); evacuationRouteLayer = null; }
+    if (shelterMarker && map.hasLayer(shelterMarker)) { map.removeLayer(shelterMarker); shelterMarker = null; }
+    if (quakeMarkersLayer && map.hasLayer(quakeMarkersLayer)) { map.removeLayer(quakeMarkersLayer); quakeMarkersLayer = null; }
+    if (floodRiskLayer && map.hasLayer(floodRiskLayer)) { map.removeLayer(floodRiskLayer); floodRiskLayer = null; }
+    if (landslideRiskLayer && map.hasLayer(landslideRiskLayer)) { map.removeLayer(landslideRiskLayer); landslideRiskLayer = null; }
+    if (hospitalMarker && map.hasLayer(hospitalMarker)) { map.removeLayer(hospitalMarker); hospitalMarker = null; }
+    if (evacuationCenterLayer && map.hasLayer(evacuationCenterLayer)) { map.removeLayer(evacuationCenterLayer); evacuationCenterLayer = null; }
 }
 
-function toggleMapFeatures(mapType) {
+function toggleMapFeatures(mapType, clickedButton) {
     clearMapLayers();
+    
+    document.querySelectorAll('.map-feature-btn').forEach(btn => {
+        btn.classList.remove('bg-app-blue', 'text-white');
+        btn.classList.add('text-gray-700');
+    });
+    if (clickedButton) {
+        clickedButton.classList.add('bg-app-blue', 'text-white');
+        clickedButton.classList.remove('text-gray-700');
+    }
 
     if (mapType === 'local_route') {
         evacuationRouteLayer = L.polyline(EVACUATION_ROUTE_COORDS, {
-            color: '#67925f', weight: 6, opacity: 0.8, dashArray: '10, 5' 
+            color: '#67925f',
+            weight: 6,
+            opacity: 0.8,
+            dashArray: '10, 5'
         }).addTo(map);
+
         map.fitBounds(evacuationRouteLayer.getBounds(), { padding: [40, 40] });
+
         const greenIcon = L.divIcon({
-            className: 'custom-div-icon',
-            html: '<i class="fa-solid fa-location-dot" style="font-size: 30px; color: #4CAF50; text-shadow: 1px 1px 2px rgba(0,0,0,0.5);"></i>',
+            className: 'custom-div-icon green-shelter-marker',
+            html: '<i class="fa-solid fa-house-shelter" style="font-size: 30px; color: #67925f; text-shadow: 1px 1px 2px rgba(0,0,0,0.5);"></i>',
             iconAnchor: [15, 30] 
         });
         shelterMarker = L.marker(SHELTER_LOCATION, { icon: greenIcon }).addTo(map)
-            .bindPopup('<span style="font-weight: bold; color: #4CAF50;">Evacuation Center</span><br>Nearest and Safest Shelter').openPopup();
-    } else if (mapType === 'evac_centers') { 
-        addEvacuationCenters();
-    } else if (mapType === 'faults') {
-        quakeMarkersLayer = generateRandomQuakeMarkers(USER_LOCATION, 0.1, 10).addTo(map);
-        map.setView(USER_LOCATION, 14);
-    } else if (mapType === 'flood') {
+            .bindPopup('<span style="font-weight: bold; color: #67925f;">Designated Evacuation Shelter</span><br>Follow the green dashed line.');
+        
+    } else if (mapType === 'quake_markers') {
+        quakeMarkersLayer = generateRandomQuakeMarkers(USER_LOCATION, 0.5, 15).addTo(map);
+        map.setView(USER_LOCATION, 12);
+        
+    } else if (mapType === 'risk_zones') {
         floodRiskLayer = L.polygon(FLOOD_ZONE_COORDS, {
-            color: 'blue',
-            fillColor: '#3498db',
+            color: '#5691b2',
+            fillColor: '#5691b2',
             fillOpacity: 0.4
-        }).addTo(map).bindPopup('High Flood Risk Zone');
-        map.setView(USER_LOCATION, 14);
-    } else if (mapType === 'landslide') {
+        }).addTo(map).bindPopup('**Flood Risk Zone**');
+        
         landslideRiskLayer = L.polygon(LANDSLIDE_ZONE_COORDS, {
-            color: 'brown',
-            fillColor: '#a0522d',
+            color: '#e74c3c',
+            fillColor: '#e74c3c',
             fillOpacity: 0.5
-        }).addTo(map).bindPopup('High Landslide Risk Zone');
+        }).addTo(map).bindPopup('**Landslide Risk Area**');
+        
         map.setView(USER_LOCATION, 14);
+
+    } else if (mapType === 'evac_centers') {
+        addEvacuationCenters();
+        
     } else if (mapType === 'hospital') {
         const hospitalIcon = L.divIcon({
-            className: 'custom-div-icon',
+            className: 'custom-div-icon red-hospital-marker',
             html: '<i class="fa-solid fa-hospital" style="font-size: 30px; color: #E74C3C; text-shadow: 1px 1px 2px rgba(0,0,0,0.5);"></i>',
             iconAnchor: [15, 30] 
         });
         hospitalMarker = L.marker(HOSPITAL_LOCATION, { icon: hospitalIcon }).addTo(map)
             .bindPopup('<span style="font-weight: bold; color: #E74C3C;">Nearest Hospital</span><br>St. Jude Medical Center').openPopup();
-        map.setView(HOSPITAL_LOCATION, 14); 
+        map.setView(HOSPITAL_LOCATION, 14);
     } else {
-         map.setView(USER_LOCATION, 14);
+        map.setView(USER_LOCATION, 14);
     }
 }
 
 function callForHelp() {
     showMessageModal("Distress signal sent! Your location (within 80m) is being transmitted to emergency contacts and nearby users.");
-    
     if (map) {
         const helpCircle = L.circle(USER_LOCATION, {
             color: 'red',
@@ -258,18 +274,19 @@ function callForHelp() {
     }
 }
 
+
 function navigateTo(targetScreenId, direction = 'right') {
     const currentScreen = document.getElementById(currentScreenId);
     const targetScreen = document.getElementById(targetScreenId);
-
+    
     if (!targetScreen) {
         return;
     }
-    
+
     const isSwipeableTarget = SWIPEABLE_SCREENS.includes(targetScreenId);
     const isSwipeableCurrent = SWIPEABLE_SCREENS.includes(currentScreenId);
-
     let isSwipeNav = false;
+
     if (isSwipeableTarget && isSwipeableCurrent) {
         const currentIndex = SWIPEABLE_SCREENS.indexOf(currentScreenId);
         const targetIndex = SWIPEABLE_SCREENS.indexOf(targetScreenId);
@@ -277,15 +294,15 @@ function navigateTo(targetScreenId, direction = 'right') {
             isSwipeNav = true;
         }
     }
-    
+
     if (isSwipeNav) {
         const currentIndex = SWIPEABLE_SCREENS.indexOf(currentScreenId);
         const targetIndex = SWIPEABLE_SCREENS.indexOf(targetScreenId);
         direction = targetIndex > currentIndex ? 'right' : 'left';
     }
 
-
     currentScreen.classList.remove('screen-visible');
+
     if (direction === 'right') {
         currentScreen.classList.add('screen-hidden-left');
     } else {
@@ -297,10 +314,11 @@ function navigateTo(targetScreenId, direction = 'right') {
     } else {
         targetScreen.classList.remove('screen-hidden-left', 'screen-hidden-right');
     }
-    
+
+
     setTimeout(() => {
         targetScreen.classList.add('screen-visible');
-        
+
         setTimeout(() => {
             if (direction === 'right') {
                 currentScreen.classList.remove('screen-hidden-left');
@@ -315,75 +333,108 @@ function navigateTo(targetScreenId, direction = 'right') {
             initMap();
         }
 
-    }, 50); 
-    
-    const showFixedUI = SWIPEABLE_SCREENS.includes(targetScreenId);
-    
-    if (showFixedUI) {
-        homeHeader.classList.remove('hidden');
-        bottomNav.classList.remove('hidden');
-    } else {
-        homeHeader.classList.add('hidden');
-        bottomNav.classList.add('hidden');
-    }
-    
-    if (targetScreenId === 'map-screen') {
-        homeHeader.classList.remove('header-border');
-        homeHeader.style.backgroundColor = 'rgba(255, 255, 255, 0.7)';
-    } else {
-        homeHeader.classList.add('header-border');
-        homeHeader.style.backgroundColor = 'rgba(255, 255, 255, 0.9)';
-    }
+        if (SWIPEABLE_SCREENS.includes(targetScreenId)) {
+            homeHeader.classList.remove('hidden');
+            bottomNav.classList.remove('hidden');
+        } else {
+            homeHeader.classList.add('hidden');
+            bottomNav.classList.add('hidden');
+        }
 
-    currentScreenId = targetScreenId;
-    updateNavBar(targetScreenId);
+        updateNavBar(targetScreenId);
+
+        currentScreenId = targetScreenId;
+    }, 10); 
 }
 
-function toggleSidebar() {
-    const mainWrapper = document.getElementById('main-content-wrapper');
-    const header = document.getElementById('home-header');
-    const nav = document.getElementById('bottom-nav');
+function setActiveTab(tab) {
+    activeTab = tab;
+    updateTabs();
+}
 
-    if (sidebar.classList.contains('open')) {
-        sidebar.classList.remove('open');
-        mainWrapper.classList.remove('slide-right');
-        header.classList.remove('slide-right');
-        nav.classList.remove('slide-right');
-        sidebarOverlay.style.display = 'none';
+function handleContinue() {
+    const isLogin = activeTab === 'login';
+    
+    if (isLogin) {
+        navigateTo('home-screen', 'right');
     } else {
-        sidebar.classList.add('open');
-        mainWrapper.classList.add('slide-right');
-        header.classList.add('slide-right');
-        nav.classList.add('slide-right');
-        sidebarOverlay.style.display = 'block';
+        navigateTo('detailed-signup-screen', 'right');
+    }
+}
+
+function togglePasswordVisibility(id) {
+    const input = document.getElementById(id);
+    const eyeIcon = document.getElementById(`${id}-eye`);
+    if (input.type === 'password') {
+        input.type = 'text';
+        eyeIcon.classList.remove('fa-eye');
+        eyeIcon.classList.add('fa-eye-slash');
+    } else {
+        input.type = 'password';
+        eyeIcon.classList.remove('fa-eye-slash');
+        eyeIcon.classList.add('fa-eye');
     }
 }
 
 function toggleOfflineMode() {
     isOfflineMode = !isOfflineMode;
-    const phoneTemplate = document.getElementById('phone-template');
-    const offlineBtn = document.getElementById('offline-mode-btn');
-    const offlineText = document.getElementById('offline-mode-text');
-    const offlineIcon = document.getElementById('offline-mode-icon');
-    const bottomNav = document.getElementById('bottom-nav');
+    const body = document.body;
+    const offlineModeIcon = document.getElementById('offline-mode-icon');
+    const offlineModeText = document.getElementById('offline-mode-text');
+    const homeOfflineIcon = document.getElementById('home-offline-icon');
+    const homeOfflineText = document.getElementById('home-offline-text');
+    const phoneFrame = document.getElementById('phone-template');
 
     if (isOfflineMode) {
-        phoneTemplate.classList.add('grayscale-mode');
-        offlineText.textContent = 'Online Mode';
-        offlineIcon.classList.remove('fa-plug-circle-xmark', 'text-gray-600');
-        offlineIcon.classList.add('fa-plug-circle-bolt', 'text-app-blue');
-        offlineBtn.classList.add('bg-blue-50'); 
-        bottomNav.style.backgroundColor = '#d1d5db';
+        phoneFrame.classList.add('grayscale-mode');
+        offlineModeIcon.classList.remove('fa-plug-circle-xmark');
+        offlineModeIcon.classList.add('fa-plug-circle-bolt');
+        offlineModeText.innerText = 'Online Mode';
+        
+        if (homeOfflineIcon) {
+            homeOfflineIcon.classList.remove('fa-plug-circle-xmark', 'text-gray-500');
+            homeOfflineIcon.classList.add('fa-plug-circle-bolt', 'text-app-blue');
+        }
+        if (homeOfflineText) {
+            homeOfflineText.innerText = 'Online Mode';
+        }
+
+        showMessageModal("Offline Mode Activated. Map tiles and data are cached and may be outdated. You can still use the SOS feature to send texts.");
     } else {
-        phoneTemplate.classList.remove('grayscale-mode');
-        offlineText.textContent = 'Offline Mode';
-        offlineIcon.classList.add('fa-plug-circle-xmark', 'text-gray-600');
-        offlineIcon.classList.remove('fa-plug-circle-bolt', 'text-app-blue');
-        offlineBtn.classList.remove('bg-blue-50'); 
-        bottomNav.style.backgroundColor = 'white'; 
+        phoneFrame.classList.remove('grayscale-mode');
+        offlineModeIcon.classList.remove('fa-plug-circle-bolt');
+        offlineModeIcon.classList.add('fa-plug-circle-xmark');
+        offlineModeText.innerText = 'Offline Mode';
+        
+         if (homeOfflineIcon) {
+            homeOfflineIcon.classList.remove('fa-plug-circle-bolt', 'text-app-blue');
+            homeOfflineIcon.classList.add('fa-plug-circle-xmark', 'text-gray-500');
+        }
+         if (homeOfflineText) {
+            homeOfflineText.innerText = 'Offline Mode';
+        }
     }
 }
 
+function handleOfflineModeClick() {
+    toggleOfflineMode();
+}
+
+function toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const sidebarOverlay = document.getElementById('sidebar-overlay');
+    const mainUI = document.querySelectorAll('.main-ui-element');
+    
+    if (sidebar.classList.contains('open')) {
+        sidebar.classList.remove('open');
+        sidebarOverlay.style.display = 'none';
+        mainUI.forEach(el => el.classList.remove('slide-right'));
+    } else {
+        sidebar.classList.add('open');
+        sidebarOverlay.style.display = 'block';
+        mainUI.forEach(el => el.classList.add('slide-right'));
+    }
+}
 
 function handleSettingsClick() {
     toggleSidebar();
@@ -396,9 +447,9 @@ function handleTermsClick() {
 }
 
 function handleLogout() {
-    toggleSidebar(); 
+    toggleSidebar();
     if (isOfflineMode) {
-        toggleOfflineMode(); 
+        toggleOfflineMode();
     }
     navigateTo('auth-screen', 'left');
 }
@@ -418,91 +469,61 @@ function updateNavBar(screenId) {
     if (screenId in ICON_PATHS) {
         const iconElement = document.getElementById(`icon-${screenId.split('-')[0]}`);
         const activeButton = document.querySelector(`.bottom-nav button[data-target-screen="${screenId}"]`);
-
         if (iconElement) {
             iconElement.src = ICON_PATHS[screenId].active;
         }
-         if (activeButton) {
+        if (activeButton) {
             activeButton.classList.remove('text-nav-color');
             activeButton.classList.add('text-medium-green');
         }
     }
 }
 
-
 function updateTabs() {
     if (activeTab === 'login') {
-        loginTab.classList.add('bg-medium-green', 'text-white', 'shadow-md');
-        signupTab.classList.remove('bg-medium-green', 'text-white', 'shadow-md');
-        
+        loginTab.classList.add('bg-medium-green', 'text-white');
+        signupTab.classList.remove('bg-medium-green', 'text-white');
         loginFields.classList.remove('hidden-content');
         signupFields.classList.add('hidden-content');
         forgotPasswordLink.classList.remove('hidden-content');
-        
-        authContinueButton.textContent = 'Login';
-        
+        authContinueButton.innerText = 'Continue';
     } else {
-        signupTab.classList.add('bg-medium-green', 'text-white', 'shadow-md');
-        loginTab.classList.remove('bg-medium-green', 'text-white', 'shadow-md');
-
-        loginFields.classList.add('hidden-content');
+        signupTab.classList.add('bg-medium-green', 'text-white');
+        loginTab.classList.remove('bg-medium-green', 'text-white');
         signupFields.classList.remove('hidden-content');
+        loginFields.classList.add('hidden-content');
         forgotPasswordLink.classList.add('hidden-content');
-        
-        authContinueButton.textContent = 'Sign Up';
-    }
-}
-
-function setActiveTab(tab) {
-    if (activeTab !== tab) {
-        activeTab = tab;
-        updateTabs();
-    }
-}
-
-function handleContinue() {
-    if (activeTab === 'login') {
-        navigateTo('home-screen', 'right');
-    } else {
-        navigateTo('detailed-signup-screen', 'right');
-    }
-}
-
-function togglePasswordVisibility(inputId) {
-    const input = document.getElementById(inputId);
-    const icon = document.getElementById(inputId + '-eye');
-    
-    if (input && icon) {
-        if (input.type === 'password') {
-            input.type = 'text';
-            icon.classList.remove('fa-eye');
-            icon.classList.add('fa-eye-slash');
-        } else {
-            input.type = 'password';
-            icon.classList.remove('fa-eye-slash');
-            icon.classList.add('fa-eye');
-        }
+        authContinueButton.innerText = 'Sign Up';
     }
 }
 
 let touchStartX = 0;
 let touchStartY = 0;
-const swipeThreshold = 75;
-const lockSwipeY = 50;
+const swipeThreshold = 50; 
+const lockSwipeY = 30;
 
 mainContentWrapper.addEventListener('touchstart', (e) => {
-    if (!SWIPEABLE_SCREENS.includes(currentScreenId)) return;
-    
-    touchStartX = e.touches[0].clientX;
-    touchStartY = e.touches[0].clientY;
-}, { passive: true }); 
+    if (e.touches.length === 1 && SWIPEABLE_SCREENS.includes(currentScreenId)) {
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+    }
+});
+
+mainContentWrapper.addEventListener('touchmove', (e) => {
+    const diffY = e.touches[0].clientY - touchStartY;
+    if (Math.abs(e.touches[0].clientX - touchStartX) > Math.abs(diffY)) {
+        e.preventDefault();
+    }
+}, { passive: false }); 
+
 
 mainContentWrapper.addEventListener('touchend', (e) => {
     if (!SWIPEABLE_SCREENS.includes(currentScreenId)) return;
-    
+    if (e.changedTouches.length !== 1) return;
+
     const touchEndX = e.changedTouches[0].clientX;
     const touchEndY = e.changedTouches[0].clientY;
-
+    
     const diffX = touchEndX - touchStartX;
     const diffY = touchEndY - touchStartY;
 
@@ -542,10 +563,6 @@ window.onload = () => {
             screen.classList.add('screen-hidden-right');
         } else {
             screen.classList.add('screen-visible');
-            screen.classList.remove('screen-hidden-left', 'screen-hidden-right');
         }
     });
-    homeHeader.classList.add('hidden');
-    bottomNav.classList.add('hidden');
-    updateNavBar('home-screen');
 };
